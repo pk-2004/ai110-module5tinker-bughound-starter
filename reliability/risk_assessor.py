@@ -53,6 +53,10 @@ def assess_risk(
         score -= 20
         reasons.append("Fixed code is much shorter than original.")
 
+    if len(original_lines) > 2 and len(fixed_lines) > len(original_lines) * 2:
+        score -= 30
+        reasons.append("Fixed code is more than twice as long as original — may be over-edited.")
+
     if "return" in original_code and "return" not in fixed_code:
         score -= 30
         reasons.append("Return statements may have been removed.")
@@ -61,6 +65,15 @@ def assess_risk(
         # This is usually good, but still risky.
         score -= 5
         reasons.append("Bare except was modified, verify correctness.")
+
+    # New calls in the fix that weren't in the original add unknown dependencies.
+    import re
+    original_calls = set(re.findall(r'\b(\w+)\s*\(', original_code))
+    fixed_calls = set(re.findall(r'\b(\w+)\s*\(', fixed_code))
+    new_calls = fixed_calls - original_calls
+    if new_calls:
+        score -= 15
+        reasons.append(f"Fix introduces new function calls not in original: {', '.join(sorted(new_calls))}.")
 
     # ----------------------------
     # Clamp score

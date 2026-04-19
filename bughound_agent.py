@@ -54,9 +54,11 @@ class BugHoundAgent:
     # Workflow steps
     # ----------------------------
     def analyze(self, code_snippet: str) -> List[Dict[str, str]]:
+        heuristic_issues = self._heuristic_analyze(code_snippet)
+
         if not self._can_call_llm():
             self._log("ANALYZE", "Using heuristic analyzer (offline mode).")
-            return self._heuristic_analyze(code_snippet)
+            return heuristic_issues
 
         self._log("ANALYZE", "Using LLM analyzer.")
         system_prompt = (
@@ -69,18 +71,23 @@ class BugHoundAgent:
             f"CODE:\n{code_snippet}"
         )
 
-        # UPDATED: Added exception handling for API errors/rate limits
         try:
             raw = self.client.complete(system_prompt=system_prompt, user_prompt=user_prompt)
         except Exception as e:
             self._log("ANALYZE", f"API Error: {str(e)}. Falling back to heuristics.")
-            return self._heuristic_analyze(code_snippet)
+            return heuristic_issues
 
         issues = self._parse_json_array_of_issues(raw)
 
         if issues is None:
             self._log("ANALYZE", "LLM output was not parseable JSON. Falling back to heuristics.")
-            return self._heuristic_analyze(code_snippet)
+            return heuristic_issues
+
+        # Merge: add any heuristic issues the LLM missed (matched by type)
+        llm_types = {i["type"] for i in issues}
+        for h in heuristic_issues:
+            if h["type"] not in llm_types:
+                issues.append(h)
 
         return issues
 
