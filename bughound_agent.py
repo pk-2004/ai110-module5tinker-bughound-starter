@@ -182,28 +182,39 @@ class BugHoundAgent:
         text = text.strip()
         parsed = self._try_json_loads(text)
         if isinstance(parsed, list):
-            return self._normalize_issues(parsed)
+            normalized = self._normalize_issues(parsed)
+            if normalized is not None:
+                return normalized
 
         array_str = self._extract_first_json_array(text)
         if array_str:
             parsed2 = self._try_json_loads(array_str)
             if isinstance(parsed2, list):
-                return self._normalize_issues(parsed2)
+                return self._normalize_issues(parsed2)  # None if all items invalid
 
         return None
 
-    def _normalize_issues(self, arr: List[Any]) -> List[Dict[str, str]]:
+    def _normalize_issues(self, arr: List[Any]) -> Optional[List[Dict[str, str]]]:
+        # Strict: an issue must have a non-empty type and msg to be trusted.
+        # If the LLM returned items but none are usable, return None so the
+        # caller falls back to heuristics. A genuinely empty array is still valid.
         issues: List[Dict[str, str]] = []
         for item in arr:
             if not isinstance(item, dict):
                 continue
+            issue_type = str(item.get("type", "")).strip()
+            msg = str(item.get("msg", "")).strip()
+            if not issue_type or not msg:
+                continue
             issues.append(
                 {
-                    "type": str(item.get("type", "Issue")),
-                    "severity": str(item.get("severity", "Unknown")),
-                    "msg": str(item.get("msg", "")).strip(),
+                    "type": issue_type,
+                    "severity": str(item.get("severity", "Unknown")).strip() or "Unknown",
+                    "msg": msg,
                 }
             )
+        if arr and not issues:
+            return None
         return issues
 
     def _try_json_loads(self, s: str) -> Any:

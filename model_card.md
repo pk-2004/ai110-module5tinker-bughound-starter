@@ -20,6 +20,9 @@ Include what is done by heuristics vs what is done by Gemini (if enabled).
 
 ---
 The heuristic model using regex to match keywords with substitute code. Gemini mode sends the entire code to the LLM asking for issues through JSON. The Gemini mode is much more accurate while the heuristic mode is quicker. 
+
+Reliability update (analysis step): Gemini's JSON is now parsed strictly. Each issue must have a non-empty `type` and `msg`; items missing either are dropped instead of being filled with defaults like "Issue" / empty message. If Gemini returns a non-empty array but none of the items are usable, BugHound treats it as unparseable and falls back to the heuristic analyzer. A genuinely empty array (`[]`) is still accepted as "no issues found."
+
 ## 3) Inputs and outputs
 
 **Inputs:**
@@ -61,6 +64,13 @@ Rule 2 — New function calls introduced
 -  A new call like isinstance or os.path.exists assumes that function is available. The agent cannot see the rest of the codebase to verify this.
 -  A fix that renames a call . The regex treats logging and info as brand-new calls and deducts 15 points, even though this is the intended replacement.
 -  A fix that reuses an existing function name with completely different arguments. The call name matches so no penalty fires, even though behavior changed.
+
+Rule 3 — Stricter auto-fix threshold (score >= 90)
+
+- Auto-fix now requires a "low" risk level **and** a score of at least 90 (`AUTOFIX_MIN_SCORE`), instead of any score of 75 or more.
+- A fix with even one notable deduction, such as a new function call (-15), now goes to human review rather than being auto-applied. For example, the heuristic print → `logging.info` fix scores about 80, which used to auto-apply and no longer does.
+- False positive: a harmless fix with one small deduction (like the logging replacement) is now blocked from auto-fix, which adds review work.
+- False negative: a risky change that the other rules don't detect still scores 100 and auto-applies. The threshold only makes the existing signals count for more.
 
 ## 5) Observed failure modes
 

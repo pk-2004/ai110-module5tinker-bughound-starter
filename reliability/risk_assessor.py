@@ -1,5 +1,7 @@
 from typing import Dict, List
 
+AUTOFIX_MIN_SCORE = 90
+
 
 def assess_risk(
     original_code: str,
@@ -93,7 +95,9 @@ def assess_risk(
     # ----------------------------
     # Auto-fix policy
     # ----------------------------
-    should_autofix = level == "low"
+    # Stricter than the "low" level (>= 75): auto-apply only near-spotless fixes,
+    # so a fix with even one notable deduction (e.g. new function calls) gets human review.
+    should_autofix = level == "low" and score >= AUTOFIX_MIN_SCORE
 
     if not reasons:
         reasons.append("No significant risks detected.")
